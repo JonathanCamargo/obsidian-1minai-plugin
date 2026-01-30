@@ -1,99 +1,189 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Editor, MarkdownView, Notice, Plugin } from "obsidian";
+import {
+  OneMinAISettings,
+  DEFAULT_SETTINGS,
+  OneMinAISettingTab,
+} from "./settings";
+import { OneMinAIClient } from "./client";
 
-// Remember to rename these classes and interfaces!
+export default class OneMinAIPlugin extends Plugin {
+  settings: OneMinAISettings;
+  client: OneMinAIClient | null = null;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+  async onload() {
+    await this.loadSettings();
+    this.initializeClient();
+    this.addSettingTab(new OneMinAISettingTab(this.app, this));
 
-	async onload() {
-		await this.loadSettings();
+    this.addCommand({
+      id: "ai-chat",
+      name: "AI Chat",
+      editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
+        // Only show command when in editor view
+        if (checking) {
+          return true; // Command is available
+        }
+        // Execute command
+        this.executeAIChat(editor);
+      },
+    });
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+    console.log("1minai plugin loaded, settings loaded");
+  }
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+  onunload() {
+    console.log("1minai plugin unloaded");
+  }
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+  initializeClient() {
+    if (this.settings.apiKey && this.settings.apiKey.trim().length > 0) {
+      this.client = new OneMinAIClient(this.settings.apiKey);
+      console.log("1minai client initialized");
+    } else {
+      this.client = null;
+      console.log("1minai client not initialized: API key missing");
+    }
+  }
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
+  reinitializeClient() {
+    this.initializeClient();
+  }
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+  showNotice(message: string, duration?: number) {
+    new Notice(message, duration || 5000);
+  }
 
-	}
+  handleApiError(error: string) {
+    const errorLower = error.toLowerCase();
+    let friendlyMessage: string;
 
-	onunload() {
-	}
+    if (errorLower.includes("401") || errorLower.includes("unauthorized")) {
+      friendlyMessage = "Invalid API key. Check your settings.";
+    } else if (errorLower.includes("403") || errorLower.includes("forbidden")) {
+      friendlyMessage = "API access denied. Check your subscription.";
+    } else if (errorLower.includes("429") || errorLower.includes("rate limit")) {
+      friendlyMessage = "Rate limited. Please wait and try again.";
+    } else if (errorLower.includes("500") || errorLower.includes("server error")) {
+      friendlyMessage = "Server error. Try again later.";
+    } else {
+      friendlyMessage = `API Error: ${error}`;
+    }
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
-	}
+    this.showNotice(friendlyMessage);
+  }
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
+  private extractPrompt(editor: Editor): string | null {
+    const cursor = editor.getCursor();
+    const text = editor.getRange({ line: 0, ch: 0 }, cursor);
+    const trimmed = text.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+  private async executeAIChat(editor: Editor): Promise<void> {
+    if (!this.client) {
+      this.showNotice("Configure API key in settings first.");
+      return;
+    }
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+    const prompt = this.extractPrompt(editor);
+    if (!prompt) {
+      this.showNotice("No prompt text found. Write something above the cursor.");
+      return;
+    }
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
+    // Insert role marker at cursor position
+    const cursor = editor.getCursor();
+    const roleMarker = "\n\n> [!ai]\n> ";
+    editor.replaceRange(roleMarker, cursor, cursor);
+
+    // Track insertion position for streamed content
+    // After marker "\n\n> [!ai]\n> ", content starts at line+3, ch 2 (after "> ")
+    let insertPos = {
+      line: cursor.line + 3,
+      ch: 2
+    };
+
+    const markerPos = { line: cursor.line, ch: cursor.ch };
+    let contentReceived = false;
+
+    try {
+      // Call streaming API
+      const stream = await this.client.chatStream({
+        prompt: prompt,
+        model: this.settings.model,
+        temperature: this.settings.temperature,
+      });
+
+      // Process stream
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let lastChunkEndedWithNewline = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        // Decode chunk
+        const chunk = decoder.decode(value, { stream: true });
+
+        if (chunk.length > 0) {
+          contentReceived = true;
+        }
+
+        // Format for callout (prefix new lines with "> ")
+        const lines = chunk.split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+
+          if (i > 0) {
+            // This is a new line - insert newline with callout prefix
+            editor.replaceRange('\n> ', insertPos, insertPos);
+            insertPos = { line: insertPos.line + 1, ch: 2 };
+          }
+
+          // Insert the text content
+          if (line.length > 0) {
+            editor.replaceRange(line, insertPos, insertPos);
+            insertPos = { line: insertPos.line, ch: insertPos.ch + line.length };
+          }
+        }
+
+        lastChunkEndedWithNewline = chunk.endsWith('\n');
+      }
+    } catch (error) {
+      // Remove marker if no content was received
+      if (!contentReceived) {
+        const endPos = {
+          line: cursor.line + 3,
+          ch: 2
+        };
+        editor.replaceRange('', markerPos, endPos);
+      }
+
+      // Handle different error types
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (errorMessage.toLowerCase().includes('fetch') ||
+          errorMessage.toLowerCase().includes('network')) {
+        this.showNotice("Network error. Check your connection.");
+      } else if (errorMessage.toLowerCase().includes('api error')) {
+        // Use existing handleApiError for API errors
+        this.handleApiError(errorMessage);
+      } else {
+        this.showNotice("Stream interrupted. Response may be incomplete.");
+      }
+    }
+  }
 }
