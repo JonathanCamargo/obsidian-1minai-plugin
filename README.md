@@ -40,9 +40,12 @@ AI chat integration for Obsidian powered by the 1minai API. Chat with AI directl
    - Go to Community Plugins
    - Enable "1minai" from the list
 
-5. Verify it works:
-   - Open Developer Console (Ctrl+Shift+I / Cmd+Option+I)
-   - You should see: `1minai plugin loaded`
+5. Go to settings and set up your 1minai key
+
+6. In your notes write a prompt and call AIchat
+   Ctrl+P > 1minai AI Chat
+   
+   You should see output from AI streaming into your note.
 
 ## Development Workflow
 
@@ -71,6 +74,6 @@ cp main.js /path/to/your/vault/.obsidian/plugins/1minai/
 └── main.js          # Built plugin (generated)
 ```
 
-This repository was developed with the assistance of Claude (Anthropic) code-generation tools. Portions of the code, documentation, and structural scaffolding may have been produced or refined using AI-assisted generation.
+This repository was developed with the assistance of Claude code-generation tools. Portions of the code, documentation, and structural scaffolding may have been produced or refined using AI-assisted generation.
 
 Users of this repository should evaluate the software according to their own quality, security, and compliance standards before deploying it in production environments.
