@@ -17,26 +17,27 @@ export default class OneMinAIPlugin extends Plugin {
 
     this.addCommand({
       id: "ai-chat",
-      name: "AI Chat",
+      name: "AI chat",
       editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
         // Only show command when in editor view
         if (checking) {
           return true; // Command is available
         }
         // Execute command
-        this.executeAIChat(editor);
+        void this.executeAIChat(editor);
       },
     });
 
-    console.log("1minai plugin loaded, settings loaded");
+    console.debug("1minai plugin loaded, settings loaded");
   }
 
   onunload() {
-    console.log("1minai plugin unloaded");
+    console.debug("1minai plugin unloaded");
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) as Partial<OneMinAISettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {});
   }
 
   async saveSettings() {
@@ -46,10 +47,10 @@ export default class OneMinAIPlugin extends Plugin {
   initializeClient() {
     if (this.settings.apiKey && this.settings.apiKey.trim().length > 0) {
       this.client = new OneMinAIClient(this.settings.apiKey);
-      console.log("1minai client initialized");
+      console.debug("1minai client initialized");
     } else {
       this.client = null;
-      console.log("1minai client not initialized: API key missing");
+      console.debug("1minai client not initialized: API key missing");
     }
   }
 
@@ -124,8 +125,7 @@ export default class OneMinAIPlugin extends Plugin {
 
       // Process stream
       const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let lastChunkEndedWithNewline = false;
+      const decoder = new TextDecoder();      
 
       while (true) {
         const { done, value } = await reader.read();
@@ -158,9 +158,7 @@ export default class OneMinAIPlugin extends Plugin {
             editor.replaceRange(line, insertPos, insertPos);
             insertPos = { line: insertPos.line, ch: insertPos.ch + line.length };
           }
-        }
-
-        lastChunkEndedWithNewline = chunk.endsWith('\n');
+        }        
       }
     } catch (error) {
       // Remove marker if no content was received

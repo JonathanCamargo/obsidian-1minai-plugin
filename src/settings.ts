@@ -35,25 +35,29 @@ export class OneMinAISettingTab extends PluginSettingTab {
 
     // API Key setting
     new Setting(containerEl)
-      .setName("API Key")
+      .setName("API key")
       .setDesc("Your 1min.ai API key")
       .addText((text) => {
         text
           .setPlaceholder("Enter your API key")
           .setValue(this.plugin.settings.apiKey)
-          .onChange(async (value) => {
-            this.plugin.settings.apiKey = value;
-            await this.plugin.saveSettings();
-          });
-        text.inputEl.type = "password";
+          .onChange((value: string) => {
+          this.plugin.settings.apiKey = value;
+          void this.plugin.saveSettings();
+        });
+        const input = text.inputEl;
+        if (input instanceof HTMLInputElement) {
+          input.type = "password";
+        }
       });
 
     // Test Connection button
     new Setting(containerEl)
-      .setName("Test Connection")
+      .setName("Test connection")
       .setDesc("Verify your API key works")
       .addButton((button) =>
-        button.setButtonText("Test").onClick(async () => {
+         button.setButtonText("Test").onClick(() => {
+          void (async () => {
           // Check if API key is empty
           if (!this.plugin.settings.apiKey || this.plugin.settings.apiKey.trim().length === 0) {
             new Notice("Please enter an API key first");
@@ -94,7 +98,8 @@ export class OneMinAISettingTab extends PluginSettingTab {
             button.setDisabled(false);
             button.setButtonText("Test");
           }
-        })
+        })();
+      })
       );
 
     // Model setting
@@ -102,11 +107,11 @@ export class OneMinAISettingTab extends PluginSettingTab {
       .setName("Model")
       .setDesc("AI model to use for chat")
       .addDropdown((dropdown) => {
-        AVAILABLE_MODELS.forEach((model) => dropdown.addOption(model, model));
+        AVAILABLE_MODELS.forEach((model) => { dropdown.addOption(model, model); });
         dropdown.setValue(this.plugin.settings.model);
-        dropdown.onChange(async (value) => {
+        dropdown.onChange((value: string) => {
           this.plugin.settings.model = value;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings().catch(console.error);
         });
       });
 
@@ -119,10 +124,9 @@ export class OneMinAISettingTab extends PluginSettingTab {
           .setLimits(0, 1, 0.1)
           .setValue(this.plugin.settings.temperature)
           .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.plugin.settings.temperature = value;
-            await this.plugin.saveSettings();
-          })
-      );
+          .onChange((value: number) => {
+          this.plugin.settings.temperature = value;
+          void this.plugin.saveSettings();
+        }));
   }
 }
